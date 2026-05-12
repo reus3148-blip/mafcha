@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>보관함</title>
+<title>—</title>
 <!--
 ======================================================================
 설정 방법 (처음 한 번만)
@@ -94,16 +94,9 @@ header{
   margin-bottom:28px;
   display:flex;
   align-items:flex-end;
-  justify-content:space-between;
+  justify-content:flex-end;
   flex-wrap:wrap;
   gap:12px;
-}
-.title{
-  font-family:'Noto Serif KR',serif;
-  font-weight:700;
-  font-size:32px;
-  letter-spacing:-.03em;
-  line-height:1;
 }
 .meta{
   font-family:'IBM Plex Mono',monospace;
@@ -357,32 +350,7 @@ header{
   border:1px solid var(--line-soft);
   pointer-events:none;
 }
-.login-title{
-  font-family:'Noto Serif KR',serif;
-  font-weight:700;
-  font-size:24px;
-  text-align:center;
-  margin-bottom:4px;
-}
-.login-sub{
-  font-family:'IBM Plex Mono',monospace;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.2em;
-  color:var(--ink-muted);
-  text-align:center;
-  margin-bottom:24px;
-}
 .field{margin-bottom:14px}
-.field label{
-  display:block;
-  font-family:'IBM Plex Mono',monospace;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.16em;
-  color:var(--ink-muted);
-  margin-bottom:5px;
-}
 .field input{
   width:100%;
   font:inherit;
@@ -471,7 +439,6 @@ header{
 
 @media (max-width:480px){
   .wrap{padding:20px 16px 80px}
-  .title{font-size:24px}
   .upload{padding:22px 16px}
   .file{padding:12px 2px}
   .file-name{font-size:14px}
@@ -493,15 +460,11 @@ header{
 <!-- 로그인 화면 -->
 <div id="login" class="hidden">
   <div class="login-card">
-    <div class="login-title">보관함</div>
-    <div class="login-sub">Personal Archive</div>
     <div class="field">
-      <label>이메일</label>
-      <input id="email" type="email" autocomplete="username" inputmode="email">
+      <input id="email" type="email" autocomplete="username" inputmode="email" aria-label="이메일">
     </div>
     <div class="field">
-      <label>비밀번호</label>
-      <input id="password" type="password" autocomplete="current-password">
+      <input id="password" type="password" autocomplete="current-password" aria-label="비밀번호">
     </div>
     <button id="loginBtn" class="btn">로그인</button>
     <div id="loginErr" class="err hidden"></div>
@@ -512,9 +475,7 @@ header{
 <div id="app" class="hidden">
   <div class="wrap">
     <header>
-      <div class="title">보관함</div>
       <div class="meta">
-        <span id="userEmail"></span>
         <button id="logoutBtn">로그아웃</button>
       </div>
     </header>
@@ -838,7 +799,6 @@ async function onLogin() {
 
 function enterApp(u) {
   user = u;
-  $('userEmail').textContent = u.email;
   hide('login');
   hide('setup');
   show('app');
