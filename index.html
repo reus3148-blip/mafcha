@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>보관함</title>
+<!--
+======================================================================
+설정 방법 (처음 한 번만)
+======================================================================
+
+[1] Supabase 프로젝트 생성
+    https://supabase.com → New project (무료)
+
+[2] 아래 두 값 입력
+    Settings → API 에서 복사
+    - Project URL  →  SUPABASE_URL
+    - anon public  →  SUPABASE_ANON_KEY
+
+[3] SQL Editor 에서 아래 전체 복붙 후 Run:
+
+    insert into storage.buckets (id, name, public)
+    values ('files', 'files', false)
+    on conflict do nothing;
+
+    create policy "own_insert"
+    on storage.objects for insert to authenticated
+    with check (
+      bucket_id = 'files'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+    create policy "own_select"
+    on storage.objects for select to authenticated
+    using (
+      bucket_id = 'files'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+    create policy "own_delete"
+    on storage.objects for delete to authenticated
+    using (
+      bucket_id = 'files'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+[4] Authentication → Providers → Email 활성화
+    개인용이면 "Confirm email" OFF 추천
+
+[5] Authentication → Users → Add user 로 본인 계정 생성
+
+[6] 이 HTML 파일 더블클릭해서 열기 (또는 Vercel 등에 배포)
+======================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ede4d0;
+  --surface:#f5efdf;
+  --surface-hi:#faf6ec;
+  --ink:#1a1410;
+  --ink-2:#3a2f24;
+  --ink-muted:#7a6a55;
+  --line:#c4b289;
+  --line-soft:#d8c9a4;
+  --accent:#8b2c2c;
+  --accent-hov:#6f2222;
+  --green:#2d5a3d;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'IBM Plex Sans KR',-apple-system,sans-serif;
+  font-weight:400;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+body{
+  background-image:
+    repeating-linear-gradient(0deg,transparent,transparent 31px,rgba(80,55,20,.04) 31px,rgba(80,55,20,.04) 32px),
+    radial-gradient(ellipse at top,rgba(255,250,235,.4),transparent 60%);
+}
+.wrap{max-width:680px;margin:0 auto;padding:32px 24px 120px}
+.hidden{display:none!important}
+
+/* ===== header ===== */
+header{
+  border-bottom:1.5px solid var(--ink);
+  padding-bottom:16px;
+  margin-bottom:28px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:12px;
+}
+.title{
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:32px;
+  letter-spacing:-.03em;
+  line-height:1;
+}
+.meta{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+  color:var(--ink-muted);
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.meta button{
+  font:inherit;
+  background:none;
+  border:none;
+  color:var(--accent);
+  cursor:pointer;
+  padding:4px 0;
+  letter-spacing:.18em;
+}
+.meta button:hover{color:var(--accent-hov);text-decoration:underline}
+
+/* ===== upload zone ===== */
+.upload{
+  display:block;
+  border:1.5px dashed var(--line);
+  background:var(--surface);
+  padding:34px 20px;
+  text-align:center;
+  margin-bottom:28px;
+  transition:background .15s,border-color .15s;
+  cursor:pointer;
+  position:relative;
+}
+.upload:hover{background:var(--surface-hi);border-color:var(--ink-2)}
+.upload.drag{background:var(--surface-hi);border-color:var(--accent);border-style:solid}
+.upload-icon{
+  font-family:'Noto Serif KR',serif;
+  font-size:32px;
+  color:var(--ink-2);
+  margin-bottom:8px;
+  line-height:1;
+}
+.upload-text{
+  font-size:14.5px;
+  color:var(--ink-2);
+  margin-bottom:6px;
+}
+.upload-hint{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  color:var(--ink-muted);
+  letter-spacing:.08em;
+}
+.upload input{display:none}
+
+/* ===== note zone (텍스트 → .txt) ===== */
+.note-zone{
+  background:var(--surface);
+  border:1px solid var(--line);
+  padding:14px 14px 12px;
+  margin-bottom:28px;
+  display:grid;
+  gap:10px;
+}
+.note-zone textarea{
+  width:100%;
+  font:inherit;
+  font-family:'IBM Plex Sans KR',-apple-system,sans-serif;
+  font-size:14px;
+  line-height:1.55;
+  color:var(--ink);
+  background:var(--surface-hi);
+  border:1px solid var(--line-soft);
+  padding:10px 12px;
+  resize:vertical;
+  min-height:72px;
+  outline:none;
+  transition:border-color .12s;
+}
+.note-zone textarea:focus{border-color:var(--ink)}
+.note-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.note-hint{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--ink-muted);
+}
+.note-btn{
+  font:inherit;
+  font-weight:500;
+  font-size:13px;
+  background:var(--ink);
+  color:var(--surface-hi);
+  border:none;
+  padding:8px 18px;
+  cursor:pointer;
+  letter-spacing:.04em;
+  transition:background .12s,opacity .12s;
+}
+.note-btn:hover{background:var(--ink-2)}
+.note-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ===== progress ===== */
+.progress{
+  margin-bottom:20px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11.5px;
+  color:var(--ink-muted);
+  padding:10px 14px;
+  background:var(--surface);
+  border-left:2.5px solid var(--accent);
+}
+
+/* ===== file list ===== */
+.list-head{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ink-muted);
+  padding:0 4px 10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  border-bottom:1px solid var(--line-soft);
+  margin-bottom:2px;
+}
+.list-head .count{color:var(--ink-2);font-weight:500;font-feature-settings:"tnum"}
+
+.file{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:8px 14px;
+  padding:14px 4px;
+  border-bottom:1px solid var(--line-soft);
+  align-items:center;
+}
+.file:hover{background:rgba(255,250,235,.4)}
+.file-info{min-width:0}
+.file-name{
+  font-size:15px;
+  font-weight:500;
+  color:var(--ink);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  margin-bottom:3px;
+}
+.file-sub{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--ink-muted);
+  letter-spacing:.04em;
+}
+.file-sub .dot{margin:0 6px;opacity:.5}
+.file-actions{display:flex;gap:4px}
+.icon-btn{
+  font:inherit;
+  background:none;
+  border:1px solid var(--line);
+  color:var(--ink-2);
+  width:34px;
+  height:34px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:all .12s;
+  font-size:14px;
+}
+.icon-btn:hover{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.icon-btn.danger:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.empty{
+  padding:56px 20px;
+  text-align:center;
+  color:var(--ink-muted);
+  font-family:'Noto Serif KR',serif;
+  font-style:italic;
+  font-size:15px;
+  letter-spacing:.01em;
+}
+
+/* ===== login ===== */
+.login-card{
+  max-width:380px;
+  margin:60px auto 0;
+  padding:36px 28px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  position:relative;
+}
+.login-card::before{
+  content:'';
+  position:absolute;
+  inset:4px;
+  border:1px solid var(--line-soft);
+  pointer-events:none;
+}
+.login-title{
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:24px;
+  text-align:center;
+  margin-bottom:4px;
+}
+.login-sub{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.2em;
+  color:var(--ink-muted);
+  text-align:center;
+  margin-bottom:24px;
+}
+.field{margin-bottom:14px}
+.field label{
+  display:block;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.16em;
+  color:var(--ink-muted);
+  margin-bottom:5px;
+}
+.field input{
+  width:100%;
+  font:inherit;
+  font-size:15px;
+  background:var(--surface-hi);
+  border:1px solid var(--line);
+  padding:9px 11px;
+  color:var(--ink);
+  outline:none;
+  transition:border-color .12s;
+}
+.field input:focus{border-color:var(--ink)}
+.btn{
+  width:100%;
+  font:inherit;
+  font-weight:500;
+  font-size:14px;
+  background:var(--ink);
+  color:var(--surface-hi);
+  border:none;
+  padding:11px;
+  cursor:pointer;
+  letter-spacing:.04em;
+  margin-top:6px;
+  transition:background .12s;
+}
+.btn:hover{background:var(--ink-2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--accent);
+  margin-top:10px;
+  padding:8px 10px;
+  background:rgba(139,44,44,.06);
+  border-left:2px solid var(--accent);
+}
+
+/* ===== setup screen ===== */
+.setup{max-width:520px;margin:60px auto 0;padding:32px 24px}
+.setup h1{
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:26px;
+  margin-bottom:8px;
+}
+.setup p{font-size:14.5px;line-height:1.7;color:var(--ink-2);margin-bottom:14px}
+.setup code{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;
+  background:var(--surface);
+  padding:2px 6px;
+  border:1px solid var(--line-soft);
+}
+.setup .note{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.16em;
+  color:var(--ink-muted);
+  margin-top:20px;
+  padding-top:16px;
+  border-top:1px solid var(--line-soft);
+}
+
+/* ===== toast ===== */
+.toast{
+  position:fixed;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:var(--ink);
+  color:var(--surface-hi);
+  padding:10px 18px;
+  font-size:13px;
+  font-family:'IBM Plex Mono',monospace;
+  letter-spacing:.04em;
+  opacity:0;
+  transition:all .2s;
+  pointer-events:none;
+  max-width:90vw;
+  text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--accent)}
+
+@media (max-width:480px){
+  .wrap{padding:20px 16px 80px}
+  .title{font-size:24px}
+  .upload{padding:22px 16px}
+  .file{padding:12px 2px}
+  .file-name{font-size:14px}
+}
+</style>
+</head>
+<body>
+
+<!-- 설정 안 됐을 때 -->
+<div id="setup" class="hidden">
+  <div class="setup">
+    <h1>설정이 필요해요</h1>
+    <p>이 파일의 <code>&lt;script&gt;</code> 안에 있는 <code>SUPABASE_URL</code>과 <code>SUPABASE_ANON_KEY</code> 값을 본인 Supabase 프로젝트의 값으로 바꿔주세요.</p>
+    <p>방법은 파일 상단의 HTML 주석에 자세히 적혀 있어요.</p>
+    <div class="note">SUPABASE → SETTINGS → API</div>
+  </div>
+</div>
+
+<!-- 로그인 화면 -->
+<div id="login" class="hidden">
+  <div class="login-card">
+    <div class="login-title">보관함</div>
+    <div class="login-sub">Personal Archive</div>
+    <div class="field">
+      <label>이메일</label>
+      <input id="email" type="email" autocomplete="username" inputmode="email">
+    </div>
+    <div class="field">
+      <label>비밀번호</label>
+      <input id="password" type="password" autocomplete="current-password">
+    </div>
+    <button id="loginBtn" class="btn">로그인</button>
+    <div id="loginErr" class="err hidden"></div>
+  </div>
+</div>
+
+<!-- 메인 앱 -->
+<div id="app" class="hidden">
+  <div class="wrap">
+    <header>
+      <div class="title">보관함</div>
+      <div class="meta">
+        <span id="userEmail"></span>
+        <button id="logoutBtn">로그아웃</button>
+      </div>
+    </header>
+
+    <label class="upload" id="uploadZone">
+      <div class="upload-icon">+</div>
+      <div class="upload-text">파일 올리기</div>
+      <div class="upload-hint">탭하거나 드래그 · 붙여넣기 · 최대 50MB · 자동 암호화</div>
+      <input type="file" id="fileInput" multiple>
+    </label>
+
+    <div class="note-zone">
+      <textarea id="noteInput" rows="3" placeholder="여기에 텍스트 붙여넣기 또는 입력…"></textarea>
+      <div class="note-row">
+        <span class="note-hint">.txt 로 저장</span>
+        <button id="noteSave" class="note-btn" type="button">저장</button>
+      </div>
+    </div>
+
+    <div id="progress" class="progress hidden"></div>
+
+    <div class="list-head">
+      <span>파일 목록</span>
+      <span class="count" id="fileCount">—</span>
+    </div>
+    <div id="fileList"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ============ 여기 두 줄 본인 값으로 바꾸기 ============
+const SUPABASE_URL = 'https://hqykjvtjihgyneohkxig.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxeWtqdnRqaWhneW5lb2hreGlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MTU5NTIsImV4cCI6MjA5NDA5MTk1Mn0.zY4rgXJ-1Fgt6yuQ4cjOLqV3UfRNMu6mEGZv-XgsYzQ';
+// ====================================================
+
+const BUCKET = 'files';
+const MAX_SIZE = 50 * 1024 * 1024;
+
+// === 장난감 암호화 (XOR cipher) ===
+// 의도: Supabase 스토리지 측에 평문이 남지 않도록. 이 HTML 소스가 곧 키이므로
+// "암호학적 보안"이 아니라 "스토리지 내용 난독화" 수준.
+// 매직 헤더로 암호화 여부를 식별해 기존 미암호화 파일은 그대로 다운로드되도록 함.
+const ENC_MAGIC = new Uint8Array([0x4D, 0x46, 0x43, 0x41, 0x01]); // "MFCA" + version 1
+const ENC_KEY = new TextEncoder().encode('mafcha-archive-2026-toy-cipher-do-not-trust-for-real-secrets');
+
+function xorTransform(bytes) {
+  const out = new Uint8Array(bytes.length);
+  const k = ENC_KEY, kl = k.length;
+  for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ k[i % kl];
+  return out;
+}
+
+async function encryptFile(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const cipher = xorTransform(buf);
+  const wrapped = new Uint8Array(ENC_MAGIC.length + cipher.length);
+  wrapped.set(ENC_MAGIC, 0);
+  wrapped.set(cipher, ENC_MAGIC.length);
+  return new File([wrapped], file.name, { type: 'application/octet-stream' });
+}
+
+function hasEncMagic(bytes) {
+  if (bytes.length < ENC_MAGIC.length) return false;
+  for (let i = 0; i < ENC_MAGIC.length; i++) if (bytes[i] !== ENC_MAGIC[i]) return false;
+  return true;
+}
+
+async function decryptBlob(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (!hasEncMagic(bytes)) return blob; // 레거시(미암호화) 파일 그대로
+  const plain = xorTransform(bytes.subarray(ENC_MAGIC.length));
+  return new Blob([plain]);
+}
+
+const $ = id => document.getElementById(id);
+const show = id => $(id).classList.remove('hidden');
+const hide = id => $(id).classList.add('hidden');
+
+let supabase, user;
+let currentAccessToken = null; // 탭 닫힐 때 서버 signOut 호출용
+
+if (!SUPABASE_URL.startsWith('http') || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY' || SUPABASE_ANON_KEY.length < 20) {
+  show('setup');
+} else {
+  init();
+}
+
+async function init() {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  // 이전 세션 잔여 토큰 청소 (persistSession=false 이전에 저장된 게 남아있을 수 있음)
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith('sb-') && k.endsWith('-auth-token')) localStorage.removeItem(k);
+    }
+  } catch {}
+  show('login');
+
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      user = null;
+      currentAccessToken = null;
+      clearIdle();
+      hide('app');
+      show('login');
+    }
+  });
+
+  $('loginBtn').onclick = onLogin;
+  $('password').onkeydown = e => { if (e.key === 'Enter') onLogin(); };
+  $('logoutBtn').onclick = () => supabase.auth.signOut();
+  $('fileInput').onchange = e => handleFiles([...e.target.files]);
+  $('noteSave').onclick = saveNote;
+
+  setupDragDrop();
+  setupPaste();
+  setupIdleTracking();
+  setupUnloadLogout();
+}
+
+// === 탭 닫힘 시 서버 측 토큰 무효화 ===
+// pagehide(모바일 Safari/iOS 신뢰) + beforeunload(데스크탑) 양쪽 등록.
+// fetch는 keepalive: true 로 unload 중에도 끝까지 송신.
+function setupUnloadLogout() {
+  const handler = () => {
+    if (!user || !currentAccessToken) return;
+    try {
+      fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${currentAccessToken}`,
+        }
+      });
+    } catch {}
+  };
+  window.addEventListener('pagehide', handler);
+  window.addEventListener('beforeunload', handler);
+}
+
+// === 1분 비활동 자동 로그아웃 ===
+const IDLE_TIMEOUT_MS = 60 * 1000;
+let idleTimer = null;
+let busyCount = 0; // 업로드/다운로드/삭제 진행 중일 땐 타임아웃 무효
+
+function bumpIdle() {
+  if (!user) return;
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(onIdleTimeout, IDLE_TIMEOUT_MS);
+}
+
+function clearIdle() {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+}
+
+async function onIdleTimeout() {
+  if (busyCount > 0) { bumpIdle(); return; }
+  if (!user) return;
+  toast('1분간 활동이 없어 로그아웃됐어요');
+  await supabase.auth.signOut();
+}
+
+function setupIdleTracking() {
+  const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'touchmove', 'scroll', 'wheel', 'paste', 'input', 'click'];
+  events.forEach(ev => document.addEventListener(ev, bumpIdle, { passive: true }));
+}
+
+function setupPaste() {
+  document.addEventListener('paste', e => {
+    if (!user) return;
+    const items = [...(e.clipboardData?.items || [])];
+    const images = items.filter(it => it.kind === 'file' && it.type.startsWith('image/'));
+    if (!images.length) return;
+    e.preventDefault();
+    const stamp = Date.now();
+    const files = images.map((it, i) => {
+      const blob = it.getAsFile();
+      const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+      const name = `clipboard_${stamp}${images.length > 1 ? '_' + i : ''}.${ext}`;
+      return new File([blob], name, { type: blob.type });
+    });
+    handleFiles(files);
+  });
+}
+
+async function saveNote() {
+  const ta = $('noteInput');
+  const text = ta.value;
+  if (!text.trim()) return;
+  const firstLine = text.split('\n')[0].slice(0, 40).trim() || 'note';
+  const name = `${firstLine}_${Date.now()}.txt`;
+  const file = new File([text], name, { type: 'text/plain;charset=utf-8' });
+  const btn = $('noteSave');
+  btn.disabled = true;
+  await handleFiles([file]);
+  ta.value = '';
+  btn.disabled = false;
+}
+
+async function onLogin() {
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  const btn = $('loginBtn');
+  const errEl = $('loginErr');
+  
+  if (!email || !password) {
+    errEl.textContent = '이메일과 비밀번호를 입력해주세요';
+    show('loginErr');
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.textContent = '로그인 중...';
+  errEl.classList.add('hidden');
+  
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  btn.disabled = false;
+  btn.textContent = '로그인';
+
+  if (error) {
+    errEl.textContent = '로그인 실패: ' + (error.message.includes('Invalid') ? '이메일 또는 비밀번호가 잘못되었습니다' : error.message);
+    show('loginErr');
+    return;
+  }
+
+  currentAccessToken = data.session?.access_token || null;
+  enterApp(data.user);
+}
+
+function enterApp(u) {
+  user = u;
+  $('userEmail').textContent = u.email;
+  hide('login');
+  hide('setup');
+  show('app');
+  bumpIdle();
+  loadFiles();
+}
+
+async function loadFiles() {
+  const { data, error } = await supabase
+    .storage
+    .from(BUCKET)
+    .list(user.id, {
+      limit: 200,
+      sortBy: { column: 'created_at', order: 'desc' }
+    });
+  
+  if (error) {
+    toast('파일 목록을 불러오지 못했어요: ' + error.message, true);
+    return;
+  }
+  
+  renderFiles(data || []);
+}
+
+function renderFiles(files) {
+  const list = $('fileList');
+  $('fileCount').textContent = files.length + ' 개';
+  
+  if (files.length === 0) {
+    list.innerHTML = '<div class="empty">아직 올린 파일이 없어요</div>';
+    return;
+  }
+  
+  list.innerHTML = files.map(f => {
+    const displayName = f.name.replace(/^\d{13}_/, '');
+    const size = formatSize(f.metadata?.size || 0);
+    const date = formatDate(f.created_at);
+    return `
+      <div class="file">
+        <div class="file-info">
+          <div class="file-name" title="${escape(displayName)}">${escape(displayName)}</div>
+          <div class="file-sub">${size}<span class="dot">·</span>${date}</div>
+        </div>
+        <div class="file-actions">
+          <button class="icon-btn" data-action="download" data-name="${escape(f.name)}" data-display="${escape(displayName)}" title="다운로드">↓</button>
+          <button class="icon-btn danger" data-action="delete" data-name="${escape(f.name)}" title="삭제">×</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  list.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.onclick = () => {
+      const { action, name, display } = btn.dataset;
+      if (action === 'download') downloadFile(name, display);
+      else if (action === 'delete') deleteFile(name, display || name);
+    };
+  });
+}
+
+async function handleFiles(files) {
+  if (!files.length) return;
+
+  const oversized = files.filter(f => f.size > MAX_SIZE);
+  if (oversized.length) {
+    toast(`${oversized[0].name} 은(는) 50MB를 넘어요`, true);
+    return;
+  }
+
+  const prog = $('progress');
+  show('progress');
+  busyCount++;
+
+  let ok = 0, fail = 0;
+  try {
+    for (const file of files) {
+      prog.textContent = `업로드 중 (${ok + fail + 1}/${files.length}) · ${file.name}`;
+      const safeName = file.name.replace(/[/\\\x00-\x1f]/g, '_');
+      const path = `${user.id}/${Date.now()}_${safeName}`;
+      const encrypted = await encryptFile(file);
+      const { error } = await supabase.storage.from(BUCKET).upload(path, encrypted, { upsert: false });
+      if (error) {
+        toast(`업로드 실패: ${file.name}`, true);
+        fail++;
+      } else {
+        ok++;
+      }
+    }
+  } finally {
+    busyCount = Math.max(0, busyCount - 1);
+    bumpIdle();
+  }
+
+  hide('progress');
+  $('fileInput').value = '';
+  toast(fail ? `${ok}개 업로드 · ${fail}개 실패` : `${ok}개 업로드 완료`, fail > 0 && ok === 0);
+  loadFiles();
+}
+
+async function downloadFile(name, displayName) {
+  const path = `${user.id}/${name}`;
+  busyCount++;
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).download(path);
+    if (error) {
+      toast('다운로드 실패: ' + error.message, true);
+      return;
+    }
+    const plain = await decryptBlob(data);
+    const url = URL.createObjectURL(plain);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = displayName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } finally {
+    busyCount = Math.max(0, busyCount - 1);
+    bumpIdle();
+  }
+}
+
+async function deleteFile(name, displayName) {
+  if (!confirm(`"${displayName}" 을(를) 삭제할까요?`)) return;
+
+  const path = `${user.id}/${name}`;
+  busyCount++;
+  try {
+    const { error } = await supabase.storage.from(BUCKET).remove([path]);
+    if (error) {
+      toast('삭제 실패: ' + error.message, true);
+      return;
+    }
+    toast('삭제됨');
+    loadFiles();
+  } finally {
+    busyCount = Math.max(0, busyCount - 1);
+    bumpIdle();
+  }
+}
+
+function setupDragDrop() {
+  const zone = $('uploadZone');
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev =>
+    zone.addEventListener(ev, e => {
+      e.preventDefault();
+      zone.classList.toggle('drag', ev === 'dragenter' || ev === 'dragover');
+      if (ev === 'drop') {
+        const files = [...(e.dataTransfer?.files || [])];
+        if (files.length) handleFiles(files);
+      }
+    })
+  );
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\.\s?/g, '.').replace(/\.$/, '');
+}
+
+function escape(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let toastTimer;
+function toast(msg, isError) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
