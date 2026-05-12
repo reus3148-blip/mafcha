@@ -213,6 +213,41 @@ header{
 .note-btn:hover{background:var(--ink-2)}
 .note-btn:disabled{opacity:.45;cursor:not-allowed}
 
+/* ===== crypto zone ===== */
+.crypto-zone textarea[readonly]{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  line-height:1.5;
+  word-break:break-all;
+  color:var(--ink-muted);
+  background:var(--surface);
+  cursor:text;
+}
+.crypto-mode{
+  display:flex;
+  gap:6px;
+  margin-bottom:-2px;
+}
+.crypto-mode button{
+  font:inherit;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  background:none;
+  border:1px solid var(--line);
+  color:var(--ink-muted);
+  padding:4px 12px;
+  cursor:pointer;
+  transition:all .12s;
+}
+.crypto-mode button:hover{color:var(--ink-2);border-color:var(--ink-2)}
+.crypto-mode button.active{
+  background:var(--ink);
+  color:var(--surface-hi);
+  border-color:var(--ink);
+}
+
 /* ===== progress ===== */
 .progress{
   margin-bottom:20px;
@@ -499,6 +534,19 @@ header{
       </div>
     </div>
 
+    <div class="note-zone crypto-zone">
+      <div class="crypto-mode">
+        <button type="button" data-mode="encrypt" class="active">암호화</button>
+        <button type="button" data-mode="decrypt">복호화</button>
+      </div>
+      <textarea id="cryptoInput" rows="3" placeholder="암호화할 텍스트…"></textarea>
+      <textarea id="cryptoOutput" rows="3" placeholder="암호화된 결과가 여기에 나와요" readonly></textarea>
+      <div class="note-row">
+        <span class="note-hint" id="cryptoHint">암호화 → .txt 저장</span>
+        <button id="cryptoSave" class="note-btn" type="button" disabled>저장</button>
+      </div>
+    </div>
+
     <div id="progress" class="progress hidden"></div>
 
     <div class="list-head">
@@ -601,6 +649,7 @@ async function init() {
 
   setupDragDrop();
   setupPaste();
+  setupCrypto();
   setupIdleTracking();
   setupUnloadLogout();
 }
@@ -668,6 +717,77 @@ function setupPaste() {
       return new File([blob], name, { type: blob.type });
     });
     handleFiles(files);
+  });
+}
+
+// === 텍스트 암호화/복호화 (사용자에게 노출되는 toy XOR + base64) ===
+const TXT_KEY = new TextEncoder().encode('mafcha-text-2026-toy-cipher');
+let cryptoMode = 'encrypt';
+
+function encryptText(text) {
+  if (!text) return '';
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i] ^ TXT_KEY[i % TXT_KEY.length]);
+  return btoa(bin);
+}
+
+function decryptText(b64) {
+  if (!b64) return '';
+  const bin = atob(b64.replace(/\s+/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const plain = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) plain[i] = bytes[i] ^ TXT_KEY[i % TXT_KEY.length];
+  return new TextDecoder('utf-8', { fatal: true }).decode(plain);
+}
+
+function updateCrypto() {
+  const input = $('cryptoInput').value;
+  const out = $('cryptoOutput');
+  if (!input) { out.value = ''; $('cryptoSave').disabled = true; return; }
+  try {
+    out.value = cryptoMode === 'encrypt' ? encryptText(input) : decryptText(input);
+    $('cryptoSave').disabled = !out.value;
+  } catch {
+    out.value = '(올바른 형식이 아니에요)';
+    $('cryptoSave').disabled = true;
+  }
+}
+
+function setCryptoMode(mode) {
+  if (mode === cryptoMode) return;
+  cryptoMode = mode;
+  document.querySelectorAll('.crypto-mode button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  const enc = mode === 'encrypt';
+  $('cryptoInput').placeholder = enc ? '암호화할 텍스트…' : '암호화된 텍스트(Base64)…';
+  $('cryptoOutput').placeholder = enc ? '암호화된 결과가 여기에 나와요' : '복호화된 결과가 여기에 나와요';
+  $('cryptoHint').textContent = (enc ? '암호화' : '복호화') + ' → .txt 저장';
+  $('cryptoInput').value = '';
+  $('cryptoOutput').value = '';
+  $('cryptoSave').disabled = true;
+}
+
+async function saveCryptoOutput() {
+  const text = $('cryptoOutput').value;
+  if (!text) return;
+  const btn = $('cryptoSave');
+  btn.disabled = true;
+  const prefix = cryptoMode === 'encrypt' ? 'encrypted' : 'decrypted';
+  const file = new File([text], `${prefix}_${Date.now()}.txt`, { type: 'text/plain;charset=utf-8' });
+  await handleFiles([file]);
+  $('cryptoInput').value = '';
+  $('cryptoOutput').value = '';
+  btn.disabled = true;
+}
+
+function setupCrypto() {
+  $('cryptoInput').addEventListener('input', updateCrypto);
+  $('cryptoSave').onclick = saveCryptoOutput;
+  document.querySelectorAll('.crypto-mode button').forEach(b => {
+    b.onclick = () => setCryptoMode(b.dataset.mode);
   });
 }
 
