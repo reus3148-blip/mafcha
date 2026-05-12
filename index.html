@@ -259,6 +259,18 @@ header{
   white-space:nowrap;
   margin-bottom:3px;
 }
+.rename-input{
+  width:100%;
+  font:inherit;
+  font-size:15px;
+  font-weight:500;
+  background:var(--surface-hi);
+  border:1px solid var(--ink);
+  padding:3px 8px;
+  color:var(--ink);
+  outline:none;
+  margin-bottom:3px;
+}
 .file-sub{
   font-family:'IBM Plex Mono',monospace;
   font-size:11px;
@@ -752,6 +764,7 @@ function renderFiles(files) {
         </div>
         <div class="file-actions">
           <button class="icon-btn" data-action="download" data-name="${escape(f.name)}" data-display="${escape(displayName)}" title="다운로드">↓</button>
+          <button class="icon-btn" data-action="rename" data-name="${escape(f.name)}" data-display="${escape(displayName)}" title="이름 변경">✎</button>
           <button class="icon-btn danger" data-action="delete" data-name="${escape(f.name)}" title="삭제">×</button>
         </div>
       </div>
@@ -762,6 +775,7 @@ function renderFiles(files) {
     btn.onclick = () => {
       const { action, name, display } = btn.dataset;
       if (action === 'download') downloadFile(name, display);
+      else if (action === 'rename') renameFile(name, display, btn);
       else if (action === 'delete') deleteFile(name, display || name);
     };
   });
@@ -828,6 +842,67 @@ async function downloadFile(name, displayName) {
     busyCount = Math.max(0, busyCount - 1);
     bumpIdle();
   }
+}
+
+async function renameFile(name, displayName, btn) {
+  const fileEl = btn.closest('.file');
+  if (!fileEl || fileEl.querySelector('.rename-input')) return;
+  const nameEl = fileEl.querySelector('.file-name');
+  if (!nameEl) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = displayName;
+  input.className = 'rename-input';
+  nameEl.replaceWith(input);
+  input.focus();
+  const dot = displayName.lastIndexOf('.');
+  if (dot > 0) input.setSelectionRange(0, dot); else input.select();
+
+  let done = false;
+  const restore = () => {
+    if (!input.isConnected) return;
+    input.replaceWith(nameEl);
+  };
+  const commit = async () => {
+    if (done) return;
+    const trimmed = input.value.trim();
+    if (!trimmed || trimmed === displayName) {
+      done = true;
+      restore();
+      return;
+    }
+    done = true;
+
+    const prefixMatch = name.match(/^(\d{13}_)/);
+    const prefix = prefixMatch ? prefixMatch[1] : '';
+    const safeNew = trimmed.replace(/[/\\\x00-\x1f]/g, '_');
+    const newName = prefix + safeNew;
+
+    const oldPath = `${user.id}/${name}`;
+    const newPath = `${user.id}/${newName}`;
+
+    busyCount++;
+    try {
+      const { error } = await supabase.storage.from(BUCKET).move(oldPath, newPath);
+      if (error) {
+        toast('이름 변경 실패: ' + error.message, true);
+        restore();
+        return;
+      }
+      toast('이름이 변경됐어요');
+      loadFiles();
+    } finally {
+      busyCount = Math.max(0, busyCount - 1);
+      bumpIdle();
+    }
+  };
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
 }
 
 async function deleteFile(name, displayName) {
