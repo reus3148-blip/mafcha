@@ -44,6 +44,13 @@
       and (storage.foldername(name))[1] = auth.uid()::text
     );
 
+    create policy "own_update"
+    on storage.objects for update to authenticated
+    using (
+      bucket_id = 'files'
+      and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
 [4] Authentication → Providers → Email 활성화
     개인용이면 "Confirm email" OFF 추천
 
@@ -877,6 +884,7 @@ function renderFiles(files) {
 
 async function handleFiles(files) {
   if (!files.length) return;
+  if (!user) return; // 파일 다이얼로그 띄운 채 idle 로그아웃되는 경우 방어
 
   const oversized = files.filter(f => f.size > MAX_SIZE);
   if (oversized.length) {
